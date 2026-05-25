@@ -1,0 +1,276 @@
+version: '3.9'
+
+services:
+  # ===== MY-APP STACK =====
+  my-app-postgres:
+    image: postgres:15-alpine
+    container_name: my-app-postgres
+    environment:
+      POSTGRES_USER: pgadmin
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: visiondb
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pgadmin -d visiondb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - mycelium
+
+  my-app-redis:
+    image: redis:7.2-alpine
+    container_name: my-app-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - mycelium
+
+  my-app-rule-engine:
+    build: ./services/rule_engine
+    container_name: my-app-rule-engine
+    environment:
+      POSTGRES_CONN: "postgresql://pgadmin:${POSTGRES_PASSWORD:-changeme}@my-app-postgres:5432/visiondb"
+      REDIS_HOST: "my-app-redis"
+      RULE_ENGINE_PORT: "8080"
+      LOG_LEVEL: "INFO"
+    depends_on:
+      my-app-postgres:
+        condition: service_healthy
+      my-app-redis:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health').read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mycelium
+
+  # ===== MYCELIUM ECOSYSTEM =====
+  postgres-central:
+    image: postgres:15-alpine
+    container_name: postgres-central
+    environment:
+      POSTGRES_USER: ${DB_USER:-admin}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+      POSTGRES_DB: mycelium
+    volumes:
+      - postgres_central_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-admin}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - mycelium
+
+  redis-central:
+    image: redis:7.2-alpine
+    container_name: redis-central
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_central_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - mycelium
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: mailhog
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    restart: unless-stopped
+    networks:
+      - mycelium
+
+  # ===== MARCU SERVICES =====
+  switchisland:
+    image: marcu-switchisland:latest
+    container_name: switchisland
+    environment:
+      POSTGRES_HOST: postgres-central
+      REDIS_HOST: redis-central
+      NODE_ENV: production
+    depends_on:
+      postgres-central:
+        condition: service_healthy
+      redis-central:
+        condition: service_healthy
+    ports:
+      - "3006:3006"
+    restart: unless-stopped
+    networks:
+      - mycelium
+
+  the-gateway:
+    image: marcu-the-gateway:latest
+    container_name: the-gateway
+    environment:
+      POSTGRES_HOST: postgres-central
+      REDIS_HOST: redis-central
+      NODE_ENV: production
+    depends_on:
+      postgres-central:
+        condition: service_healthy
+      redis-central:
+        condition: service_healthy
+    ports:
+      - "3012:3012"
+    restart: unless-stopped
+    networks:
+      - mycelium
+
+  spore-scribe:
+    image: marcu-spore-scribe:latest
+    container_name: spore-scribe
+    environment:
+      POSTGRES_HOST: postgres-central
+      REDIS_HOST: redis-central
+      NODE_ENV: production
+    depends_on:
+      postgres-central:
+        condition: service_healthy
+      redis-central:
+        condition: service_healthy
+    ports:
+      - "3010:3010"
+    restart: unless-stopped
+    networks:
+      - mycelium
+
+  renewal-core:
+    image: marcu-renewal-core:latest
+    container_name: renewal-core
+    environment:
+      POSTGRES_HOST: postgres-central
+      REDIS_HOST: redis-central
+      NODE_ENV: production
+    depends_on:
+      postgres-central:
+        condition: service_healthy
+      redis-central:
+        condition: service_healthy
+    ports:
+      - "3011:3011"
+    restart: unless-stopped
+    networks:
+      - mycelium
+
+  # ===== VECTOR DB & SEARCH =====
+  memsys-milvus-standalone:
+    image: milvusdb/milvus:v2.5.2
+    container_name: memsys-milvus-standalone
+    environment:
+      COMMON_STORAGETYPE: local
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    volumes:
+      - milvus_data:/var/lib/milvus
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - mycelium
+
+  memsys-elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: memsys-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+    ports:
+      - "19200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200 | grep -q cluster_name"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - mycelium
+
+  memsys-mongodb:
+    image: mongo:7.0
+    container_name: memsys-mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - mycelium
+
+  # ===== INGRESS & PROXY =====
+  caddy:
+    image: caddy:latest
+    container_name: mdgt-public-ingress
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+    networks:
+      - mycelium
+
+volumes:
+  pgdata:
+    driver: local
+  redis_data:
+    driver: local
+  postgres_central_data:
+    driver: local
+  redis_central_data:
+    driver: local
+  milvus_data:
+    driver: local
+  elasticsearch_data:
+    driver: local
+  mongodb_data:
+    driver: local
+  caddy_data:
+    driver: local
+  caddy_config:
+    driver: local
+
+networks:
+  mycelium:
+    driver: bridge
