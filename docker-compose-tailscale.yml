@@ -1,0 +1,85 @@
+services:
+  postgres:
+    image: postgres:13
+    container_name: my-app-postgres
+    environment:
+      POSTGRES_USER: pgadmin
+      POSTGRES_PASSWORD: examplepassword
+      POSTGRES_DB: visiondb
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pgadmin -d visiondb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: on-failure
+
+  redis:
+    image: redis:7-alpine
+    container_name: my-app-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: on-failure
+
+  rule-engine:
+    build: ./services/rule_engine
+    container_name: my-app-rule-engine
+    environment:
+      POSTGRES_CONN: "postgresql://pgadmin:examplepassword@postgres:5432/visiondb"
+      REDIS_HOST: "redis"
+      MILVUS_HOST: "localhost"
+      RULE_ENGINE_PORT: "8080"
+      LOG_LEVEL: "INFO"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  tailscale:
+    image: tailscale/tailscale:latest
+    container_name: my-app-tailscale
+    cap_add:
+      - net_admin
+      - sys_module
+    environment:
+      TS_AUTHKEY: ${TAILSCALE_AUTHKEY}
+      TS_HOSTNAME: vision-platform-local
+      TS_STATE_DIR: /var/lib/tailscale
+    volumes:
+      - tailscale_state:/var/lib/tailscale
+    restart: on-failure
+    # For local testing without auth key:
+    # command: /bin/sh -c 'tailscaled --state=/var/lib/tailscale/state.db'
+    networks:
+      - vision-network
+
+volumes:
+  pgdata:
+    driver: local
+  redis_data:
+    driver: local
+  tailscale_state:
+    driver: local
+
+networks:
+  default:
+    name: vision-network

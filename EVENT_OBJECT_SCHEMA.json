@@ -1,0 +1,514 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Event Object Schema",
+  "description": "Represents a timestamped event in the vision system: detections, rule matches, corrections, contradictions, and state changes. Events form the audit trail and feed the learning loop.",
+  "type": "object",
+  "required": [
+    "event_id",
+    "event_type",
+    "timestamp",
+    "entity_id"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier for the event (UUID v4)"
+    },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "detection.created",
+        "entity.recognized",
+        "entity.updated",
+        "rule.matched",
+        "rule.contradicted",
+        "correction.applied",
+        "rule.merged",
+        "rule.retired",
+        "alert.surfaced",
+        "contradiction.detected",
+        "confidence.changed"
+      ],
+      "description": "Classification of the event"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when event occurred"
+    },
+    "entity_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Primary entity affected by this event"
+    },
+    "rule_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid",
+      "description": "Rule ID if event is rule-related (null for detection-only events)"
+    },
+    "source": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_-]+$",
+      "description": "Source identifier: camera, sensor, user, system, or API endpoint"
+    },
+    "event_data": {
+      "type": "object",
+      "description": "Detailed event payload (structure varies by event_type)",
+      "properties": {
+        "detection": {
+          "type": "object",
+          "description": "For detection.created events",
+          "properties": {
+            "detection_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "bounding_box": {
+              "type": "object",
+              "properties": {
+                "x": {
+                  "type": "number"
+                },
+                "y": {
+                  "type": "number"
+                },
+                "width": {
+                  "type": "number"
+                },
+                "height": {
+                  "type": "number"
+                }
+              }
+            },
+            "class": {
+              "type": "string"
+            },
+            "confidence": {
+              "type": "number",
+              "minimum": 0.0,
+              "maximum": 1.0
+            },
+            "attributes": {
+              "type": "object"
+            }
+          }
+        },
+        "rule_match": {
+          "type": "object",
+          "description": "For rule.matched events",
+          "properties": {
+            "rule_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "predicate": {
+              "type": "string"
+            },
+            "conditions_satisfied": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "evidence_found": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "match_confidence": {
+              "type": "number",
+              "minimum": 0.0,
+              "maximum": 1.0
+            },
+            "explanation": {
+              "type": "string",
+              "description": "Human-readable reasoning for the match"
+            }
+          }
+        },
+        "contradiction": {
+          "type": "object",
+          "description": "For rule.contradicted and contradiction.detected events",
+          "properties": {
+            "rule_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "contradicting_evidence": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "contradiction_type": {
+              "type": "string",
+              "enum": [
+                "user_correction",
+                "conflicting_detection",
+                "expired_condition",
+                "environmental_change"
+              ]
+            },
+            "details": {
+              "type": "string"
+            }
+          }
+        },
+        "correction": {
+          "type": "object",
+          "description": "For correction.applied events",
+          "properties": {
+            "correction_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "corrected_by": {
+              "type": "string",
+              "pattern": "^(user|system):[a-zA-Z0-9_-]+$"
+            },
+            "correction_type": {
+              "type": "string",
+              "enum": [
+                "entity_classification",
+                "attribute_update",
+                "rule_adjustment",
+                "false_positive_marking",
+                "false_negative_marking"
+              ]
+            },
+            "previous_value": {
+              "type": [
+                "string",
+                "number",
+                "object",
+                "null"
+              ]
+            },
+            "corrected_value": {
+              "type": [
+                "string",
+                "number",
+                "object",
+                "null"
+              ]
+            },
+            "reason": {
+              "type": "string",
+              "description": "User-provided reason for correction"
+            }
+          }
+        },
+        "merge": {
+          "type": "object",
+          "description": "For rule.merged events",
+          "properties": {
+            "source_rule_ids": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "resulting_rule_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "merge_strategy": {
+              "type": "string",
+              "enum": [
+                "combine_conditions",
+                "increase_priority",
+                "consolidate_evidence",
+                "resolve_conflict"
+              ]
+            },
+            "merged_by": {
+              "type": "string",
+              "pattern": "^(user|system):[a-zA-Z0-9_-]+$"
+            }
+          }
+        },
+        "retirement": {
+          "type": "object",
+          "description": "For rule.retired events",
+          "properties": {
+            "rule_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "reason": {
+              "type": "string",
+              "enum": [
+                "low_confidence",
+                "high_contradiction",
+                "user_requested",
+                "superseded",
+                "obsolete"
+              ]
+            },
+            "retired_by": {
+              "type": "string",
+              "pattern": "^(user|system):[a-zA-Z0-9_-]+$"
+            },
+            "explanation": {
+              "type": "string"
+            }
+          }
+        },
+        "alert": {
+          "type": "object",
+          "description": "For alert.surfaced events",
+          "properties": {
+            "alert_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "alert_type": {
+              "type": "string",
+              "enum": [
+                "critical",
+                "warning",
+                "info"
+              ]
+            },
+            "message": {
+              "type": "string"
+            },
+            "target_user": {
+              "type": "string"
+            },
+            "channel": {
+              "type": "string",
+              "enum": [
+                "mobile_push",
+                "web_notification",
+                "email",
+                "slack",
+                "console"
+              ]
+            }
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "Confidence score of the event (detection confidence, rule match confidence, etc.)"
+    },
+    "user_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[a-zA-Z0-9_-]+$",
+      "description": "User ID if event was triggered by user action (null for automated events)"
+    },
+    "session_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid",
+      "description": "Session ID for grouping related events (null if not part of session)"
+    },
+    "parent_event_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid",
+      "description": "UUID of parent event if this event was triggered by another event (null if root event)"
+    },
+    "related_events": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "description": "List of related event UUIDs (e.g., correction event related to rule match event)"
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Additional metadata for debugging and analytics",
+      "properties": {
+        "processing_time_ms": {
+          "type": "number",
+          "description": "Time taken to process event (milliseconds)"
+        },
+        "model_version": {
+          "type": "string",
+          "description": "Version of detection model used"
+        },
+        "frame_id": {
+          "type": "string",
+          "description": "Video frame ID for video-based events"
+        },
+        "device_id": {
+          "type": "string",
+          "description": "Device ID for mobile/external events"
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "examples": [
+    {
+      "event_id": "550e8400-e29b-41d4-a716-446655440000",
+      "event_type": "detection.created",
+      "timestamp": "2026-03-11T03:07:00Z",
+      "entity_id": "550e8400-e29b-41d4-a716-446655440001",
+      "rule_id": null,
+      "source": "camera-1",
+      "event_data": {
+        "detection": {
+          "detection_id": "det-001",
+          "bounding_box": {
+            "x": 150,
+            "y": 200,
+            "width": 100,
+            "height": 120
+          },
+          "class": "battery_pack",
+          "confidence": 0.94,
+          "attributes": {
+            "scuffing_score": 0.2,
+            "wear_score": 0.7,
+            "color": "black"
+          }
+        }
+      },
+      "confidence": 0.94,
+      "user_id": null,
+      "session_id": "sess-001",
+      "parent_event_id": null,
+      "related_events": [
+        "550e8400-e29b-41d4-a716-446655440002"
+      ],
+      "metadata": {
+        "processing_time_ms": 45,
+        "model_version": "yolov8-battery-v2.1",
+        "frame_id": "frame-12345"
+      }
+    },
+    {
+      "event_id": "550e8400-e29b-41d4-a716-446655440002",
+      "event_type": "rule.matched",
+      "timestamp": "2026-03-11T03:07:02Z",
+      "entity_id": "550e8400-e29b-41d4-a716-446655440001",
+      "rule_id": "550e8400-e29b-41d4-a716-446655440000",
+      "source": "rule-engine",
+      "event_data": {
+        "rule_match": {
+          "rule_id": "550e8400-e29b-41d4-a716-446655440000",
+          "predicate": "older_packs_have_scuffing",
+          "conditions_satisfied": [
+            "age > 2 years"
+          ],
+          "evidence_found": [
+            "scuffing_score (0.72) > threshold (0.65)"
+          ],
+          "match_confidence": 0.89,
+          "explanation": "Battery SN-12345 is 2.5 years old and exhibits scuffing score of 0.72, exceeding threshold of 0.65. Recommend replacement."
+        }
+      },
+      "confidence": 0.89,
+      "user_id": null,
+      "session_id": "sess-001",
+      "parent_event_id": "550e8400-e29b-41d4-a716-446655440000",
+      "related_events": [],
+      "metadata": {
+        "processing_time_ms": 12
+      }
+    },
+    {
+      "event_id": "550e8400-e29b-41d4-a716-446655440003",
+      "event_type": "correction.applied",
+      "timestamp": "2026-03-11T03:10:00Z",
+      "entity_id": "550e8400-e29b-41d4-a716-446655440001",
+      "rule_id": "550e8400-e29b-41d4-a716-446655440000",
+      "source": "mobile-app",
+      "event_data": {
+        "correction": {
+          "correction_id": "corr-001",
+          "corrected_by": "user:Archer",
+          "correction_type": "false_positive_marking",
+          "previous_value": "needs_replacement",
+          "corrected_value": "condition_acceptable",
+          "reason": "Battery is still functioning well. Scuffing is cosmetic only."
+        }
+      },
+      "confidence": 1.0,
+      "user_id": "Archer",
+      "session_id": "sess-001",
+      "parent_event_id": "550e8400-e29b-41d4-a716-446655440002",
+      "related_events": [
+        "550e8400-e29b-41d4-a716-446655440002"
+      ],
+      "metadata": {
+        "device_id": "mobile-iphone-12"
+      }
+    },
+    {
+      "event_id": "550e8400-e29b-41d4-a716-446655440004",
+      "event_type": "contradiction.detected",
+      "timestamp": "2026-03-11T03:10:05Z",
+      "entity_id": "550e8400-e29b-41d4-a716-446655440001",
+      "rule_id": "550e8400-e29b-41d4-a716-446655440000",
+      "source": "system",
+      "event_data": {
+        "contradiction": {
+          "rule_id": "550e8400-e29b-41d4-a716-446655440000",
+          "contradicting_evidence": [
+            "User marked as false positive"
+          ],
+          "contradiction_type": "user_correction",
+          "details": "User feedback contradicts rule prediction. Rule flagged for replacement, but user verified battery is functional."
+        }
+      },
+      "confidence": 1.0,
+      "user_id": null,
+      "session_id": "sess-001",
+      "parent_event_id": "550e8400-e29b-41d4-a716-446655440003",
+      "related_events": [
+        "550e8400-e29b-41d4-a716-446655440002",
+        "550e8400-e29b-41d4-a716-446655440003"
+      ],
+      "metadata": {}
+    },
+    {
+      "event_id": "550e8400-e29b-41d4-a716-446655440005",
+      "event_type": "rule.merged",
+      "timestamp": "2026-03-11T04:00:00Z",
+      "entity_id": null,
+      "rule_id": "550e8400-e29b-41d4-a716-446655440000",
+      "source": "system",
+      "event_data": {
+        "merge": {
+          "source_rule_ids": [
+            "rule-uuid-1",
+            "rule-uuid-2"
+          ],
+          "resulting_rule_id": "550e8400-e29b-41d4-a716-446655440000",
+          "merge_strategy": "consolidate_evidence",
+          "merged_by": "system:auto-learner"
+        }
+      },
+      "confidence": 0.88,
+      "user_id": null,
+      "session_id": null,
+      "parent_event_id": null,
+      "related_events": [],
+      "metadata": {
+        "processing_time_ms": 234
+      }
+    }
+  ]
+}

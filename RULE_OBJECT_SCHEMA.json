@@ -1,0 +1,426 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Rule Object Schema",
+  "description": "Represents a decision rule in the vision system that maps conditions and evidence clues to actionable conclusions. Rules are versioned, mergeable, and track contradictions.",
+  "type": "object",
+  "required": [
+    "rule_id",
+    "predicate",
+    "conditions",
+    "evidence_clues",
+    "type",
+    "version",
+    "created_by",
+    "created_at",
+    "contradiction_count",
+    "contradiction_threshold"
+  ],
+  "properties": {
+    "rule_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier for the rule (UUID v4)"
+    },
+    "predicate": {
+      "type": "string",
+      "pattern": "^[a-z_]+[a-z0-9_]*$",
+      "minLength": 3,
+      "maxLength": 128,
+      "description": "Human-readable rule name in snake_case (e.g., 'older_packs_have_scuffing', 'battery_replacement_needed')"
+    },
+    "conditions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "description": "List of condition expressions evaluated in AND logic. Examples: 'age > 2 years', 'scuffing_score > 0.5', 'location == \"shelf-A\"'",
+      "examples": [
+        [
+          "age > 2 years",
+          "scuffing_score > 0.5"
+        ],
+        [
+          "wear_score > 0.7",
+          "battery_voltage < 11.0"
+        ],
+        [
+          "color == \"black\"",
+          "serial matches /^SN-2024.*/"
+        ]
+      ]
+    },
+    "evidence_clues": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "description": "List of observable signals that support the rule conclusion. Used for explanation and confidence scoring.",
+      "examples": [
+        [
+          "scuffing_score > 0.5",
+          "visible_cracks_detected",
+          "color_fading_detected"
+        ],
+        [
+          "battery_voltage < 11.0",
+          "temperature_elevated"
+        ]
+      ]
+    },
+    "action": {
+      "type": "string",
+      "enum": [
+        "flag_for_replacement",
+        "flag_for_repair",
+        "escalate_to_human",
+        "log_observation",
+        "alert_user",
+        "quarantine",
+        "schedule_maintenance",
+        "custom"
+      ],
+      "description": "Action to trigger when rule matches"
+    },
+    "action_metadata": {
+      "type": "object",
+      "description": "Additional parameters for the action (e.g., severity level, notification template)",
+      "properties": {
+        "severity": {
+          "type": "string",
+          "enum": [
+            "critical",
+            "warning",
+            "info"
+          ]
+        },
+        "notification_template": {
+          "type": "string",
+          "description": "Template ID for user notification message"
+        },
+        "escalation_group": {
+          "type": "string",
+          "description": "Team or user ID for escalation"
+        }
+      },
+      "additionalProperties": true
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "heuristic",
+        "learned_from_corrections",
+        "domain_expert",
+        "statistical",
+        "merged"
+      ],
+      "description": "Classification of rule origin and confidence level"
+    },
+    "priority": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100,
+      "default": 50,
+      "description": "Execution priority when multiple rules match (higher = execute first)"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Version number, incremented on each substantial update or merge"
+    },
+    "created_by": {
+      "type": "string",
+      "pattern": "^(user|system):[a-zA-Z0-9_-]+$",
+      "description": "Creator identifier (e.g., 'user:Archer', 'system:auto-learner')"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of rule creation"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of last modification"
+    },
+    "updated_by": {
+      "type": "string",
+      "pattern": "^(user|system):[a-zA-Z0-9_-]+$",
+      "description": "Identifier of last updater"
+    },
+    "contradiction_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of contradictory observations (user corrections or conflicting evidence) since creation or last reset"
+    },
+    "contradiction_threshold": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 3,
+      "description": "Number of contradictions before rule enters 'uncertain' state or is retired"
+    },
+    "last_contradiction_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of most recent contradiction (null if no contradictions)"
+    },
+    "match_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Total number of times this rule has matched an entity"
+    },
+    "last_match_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of most recent match"
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "Prior confidence in rule correctness (adjusted by contradiction_count and match_count)"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Categorical tags for organization and filtering (e.g., 'battery', 'aging', 'critical')",
+      "examples": [
+        [
+          "battery",
+          "wear_assessment",
+          "critical"
+        ]
+      ]
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 512,
+      "description": "Human-readable explanation of rule logic and rationale"
+    },
+    "merged_from": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "description": "List of rule UUIDs that were merged into this rule (for traceability and rollback)"
+    },
+    "superseded_by": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid",
+      "description": "UUID of newer rule that supersedes this one (null if current)"
+    },
+    "retired_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when rule was retired (null if active)"
+    },
+    "retirement_reason": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "low_confidence",
+        "high_contradiction",
+        "user_requested",
+        "superseded",
+        "obsolete",
+        null
+      ],
+      "description": "Reason for retirement, if applicable"
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Additional metadata for analytics and debugging",
+      "properties": {
+        "source_dataset": {
+          "type": "string",
+          "description": "Dataset from which rule was learned (if applicable)"
+        },
+        "learning_algorithm": {
+          "type": "string",
+          "description": "Algorithm used to derive rule (e.g., 'decision-tree', 'user-feedback-aggregation')"
+        },
+        "a_b_test_id": {
+          "type": "string",
+          "description": "A/B test identifier if rule is under evaluation"
+        },
+        "performance_metrics": {
+          "type": "object",
+          "properties": {
+            "precision": {
+              "type": "number",
+              "minimum": 0.0,
+              "maximum": 1.0
+            },
+            "recall": {
+              "type": "number",
+              "minimum": 0.0,
+              "maximum": 1.0
+            },
+            "f1_score": {
+              "type": "number",
+              "minimum": 0.0,
+              "maximum": 1.0
+            }
+          }
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "examples": [
+    {
+      "rule_id": "550e8400-e29b-41d4-a716-446655440000",
+      "predicate": "older_packs_have_scuffing",
+      "conditions": [
+        "age > 2 years"
+      ],
+      "evidence_clues": [
+        "scuffing_score > 0.5"
+      ],
+      "action": "flag_for_replacement",
+      "action_metadata": {
+        "severity": "warning",
+        "notification_template": "battery_replacement_warning"
+      },
+      "type": "heuristic",
+      "priority": 50,
+      "version": 3,
+      "created_by": "user:Archer",
+      "created_at": "2026-03-11T03:00:00Z",
+      "updated_at": "2026-03-11T03:15:00Z",
+      "updated_by": "user:Archer",
+      "contradiction_count": 0,
+      "contradiction_threshold": 3,
+      "last_contradiction_at": null,
+      "match_count": 12,
+      "last_match_at": "2026-03-11T02:45:00Z",
+      "confidence": 0.85,
+      "tags": [
+        "battery",
+        "aging",
+        "wear_assessment"
+      ],
+      "description": "Batteries older than 2 years typically show scuffing marks from handling and storage. Flag for replacement if scuffing score exceeds threshold.",
+      "merged_from": [
+        "rule-uuid-1",
+        "rule-uuid-2"
+      ],
+      "superseded_by": null,
+      "retired_at": null,
+      "retirement_reason": null,
+      "metadata": {
+        "source_dataset": "field_observations_2024",
+        "learning_algorithm": "user-feedback-aggregation",
+        "performance_metrics": {
+          "precision": 0.88,
+          "recall": 0.82,
+          "f1_score": 0.85
+        }
+      }
+    },
+    {
+      "rule_id": "650e8400-e29b-41d4-a716-446655440001",
+      "predicate": "battery_voltage_low_replacement_needed",
+      "conditions": [
+        "battery_voltage < 11.0",
+        "temperature > 25"
+      ],
+      "evidence_clues": [
+        "battery_voltage < 11.0",
+        "temperature_elevated",
+        "wear_score > 0.6"
+      ],
+      "action": "alert_user",
+      "action_metadata": {
+        "severity": "critical",
+        "notification_template": "battery_critical_voltage",
+        "escalation_group": "ops-team-1"
+      },
+      "type": "learned_from_corrections",
+      "priority": 90,
+      "version": 5,
+      "created_by": "system:auto-learner",
+      "created_at": "2026-02-15T10:00:00Z",
+      "updated_at": "2026-03-10T15:30:00Z",
+      "updated_by": "user:Archer",
+      "contradiction_count": 1,
+      "contradiction_threshold": 3,
+      "last_contradiction_at": "2026-03-10T14:00:00Z",
+      "match_count": 47,
+      "last_match_at": "2026-03-11T03:05:00Z",
+      "confidence": 0.92,
+      "tags": [
+        "battery",
+        "voltage",
+        "critical",
+        "maintenance"
+      ],
+      "description": "Batteries with voltage below 11V at elevated temperature are at immediate risk of failure. Alert user and escalate for immediate replacement.",
+      "merged_from": [],
+      "superseded_by": null,
+      "retired_at": null,
+      "retirement_reason": null,
+      "metadata": {
+        "learning_algorithm": "field-incident-analysis",
+        "a_b_test_id": "test_voltage_threshold_2026",
+        "performance_metrics": {
+          "precision": 0.94,
+          "recall": 0.89,
+          "f1_score": 0.91
+        }
+      }
+    },
+    {
+      "rule_id": "750e8400-e29b-41d4-a716-446655440002",
+      "predicate": "old_rule_superseded",
+      "conditions": [
+        "age > 1 year"
+      ],
+      "evidence_clues": [
+        "outdated_detection_method"
+      ],
+      "action": "log_observation",
+      "type": "heuristic",
+      "priority": 10,
+      "version": 1,
+      "created_by": "user:System",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-03-05T12:00:00Z",
+      "updated_by": "user:Archer",
+      "contradiction_count": 8,
+      "contradiction_threshold": 3,
+      "last_contradiction_at": "2026-03-05T10:30:00Z",
+      "match_count": 5,
+      "last_match_at": "2026-02-28T08:15:00Z",
+      "confidence": 0.45,
+      "tags": [
+        "legacy",
+        "low_confidence"
+      ],
+      "description": "This rule has been superseded by improved detection methods.",
+      "merged_from": [],
+      "superseded_by": "550e8400-e29b-41d4-a716-446655440000",
+      "retired_at": "2026-03-05T12:00:00Z",
+      "retirement_reason": "superseded",
+      "metadata": {}
+    }
+  ]
+}

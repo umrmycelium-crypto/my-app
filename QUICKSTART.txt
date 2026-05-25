@@ -1,0 +1,75 @@
+# Quick Start
+
+## Project Structure
+```
+C:\projects\my-app
+├── docker-compose.yml    # Service orchestration
+├── .env                  # Environment variables
+├── .dockerignore         # Docker build ignore patterns
+├── services/
+│   └── rule_engine/      # Rule engine microservice
+│       ├── Dockerfile    # Multi-stage build
+│       ├── app.py        # Flask application
+│       ├── requirements.txt
+│       └── .dockerignore
+└── tests/
+    └── test-detect.ps1   # PowerShell test script
+```
+
+## Services
+- **PostgreSQL 13**: Database at postgres:5432
+- **Redis 6**: Cache at redis:6379
+- **Milvus v2.2.9**: Vector DB at milvus:19530
+- **Rule Engine**: Flask API at localhost:8080
+
+## Running the Project
+
+### 1. Start all services
+```powershell
+cd C:\projects\my-app
+docker compose up --pull always
+```
+
+Wait for all services to become healthy (check the "health" status).
+
+### 2. Test the /detect endpoint
+```powershell
+cd C:\projects\my-app\tests
+./test-detect.ps1
+```
+
+### 3. Check recorded detections
+```powershell
+$response = Invoke-RestMethod -Uri "http://localhost:8080/detections"
+$response | ConvertTo-Json -Depth 5
+```
+
+### 4. Stop services
+```powershell
+docker compose down
+```
+
+## Environment Variables (.env)
+- POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB
+- POSTGRES_CONN: Connection string
+- REDIS_HOST, MILVUS_HOST: Service hostnames
+- RULE_ENGINE_PORT: API port
+
+## API Endpoints
+- `POST /detect` - Submit detection with attributes and confidence
+- `GET /detections` - Retrieve all recorded detections
+- `GET /health` - Health check
+
+## Troubleshooting
+
+### "no configuration file provided"
+Make sure you're in C:\projects\my-app when running docker compose up
+
+### Containers failing to start
+Check logs with: `docker compose logs <service_name>`
+
+### Database/Redis connection errors
+Wait for healthchecks to pass. Services need time to initialize.
+
+### Port conflicts
+Adjust ports in docker-compose.yml if 5432, 6379, 19530, 8080 are in use

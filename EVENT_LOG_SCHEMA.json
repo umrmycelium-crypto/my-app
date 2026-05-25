@@ -1,0 +1,517 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Event Log Schema",
+  "description": "Represents a compact, queryable log entry for vision system events. Optimized for high-volume logging, time-series analysis, and audit trails. Designed for fast writes to PostgreSQL or time-series databases.",
+  "type": "object",
+  "required": [
+    "event_id",
+    "timestamp",
+    "entity_id"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier for the log entry (UUID v4)"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when event occurred. Should be indexed for time-range queries."
+    },
+    "entity_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "UUID of the entity (battery, enclosure, etc.) involved in event"
+    },
+    "detection": {
+      "type": "object",
+      "description": "Detection metadata if event involves object detection",
+      "properties": {
+        "detection_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Unique ID for this detection"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "battery_pack",
+            "enclosure",
+            "connector",
+            "circuit_board",
+            "cable",
+            "unknown"
+          ],
+          "description": "Detected object class"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "description": "Detection model confidence"
+        },
+        "bounding_box": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "width": {
+              "type": "number"
+            },
+            "height": {
+              "type": "number"
+            }
+          },
+          "description": "Bounding box coordinates in frame"
+        },
+        "attributes": {
+          "type": "object",
+          "description": "Extracted attributes (scuffing, wear, color, etc.)",
+          "properties": {
+            "scuffing_score": {
+              "type": "number",
+              "minimum": 0.0,
+              "maximum": 1.0
+            },
+            "wear_score": {
+              "type": "number",
+              "minimum": 0.0,
+              "maximum": 1.0
+            },
+            "color": {
+              "type": "string"
+            },
+            "serial": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "type",
+        "confidence"
+      ]
+    },
+    "applied_rules": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "description": "List of rule UUIDs that matched this entity. Empty array if no rules matched."
+    },
+    "rule_matches": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "rule_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "predicate": {
+            "type": "string",
+            "description": "Rule name (e.g., 'older_packs_have_scuffing')"
+          },
+          "match_confidence": {
+            "type": "number",
+            "minimum": 0.0,
+            "maximum": 1.0
+          },
+          "explanation": {
+            "type": "string",
+            "description": "Brief explanation of why rule matched"
+          }
+        }
+      },
+      "description": "Detailed rule match information for auditing"
+    },
+    "action": {
+      "type": "string",
+      "enum": [
+        "detection_created",
+        "entity_recognized",
+        "entity_updated",
+        "rule_matched",
+        "rule_contradicted",
+        "surfaced_rule",
+        "suppressed_alert",
+        "correction_applied",
+        "rule_merged",
+        "rule_retired",
+        "confidence_changed",
+        "alert_sent",
+        "escalated"
+      ],
+      "description": "Primary action taken during this event"
+    },
+    "action_metadata": {
+      "type": "object",
+      "description": "Additional metadata about the action",
+      "properties": {
+        "alert_type": {
+          "type": "string",
+          "enum": [
+            "critical",
+            "warning",
+            "info"
+          ]
+        },
+        "notification_channel": {
+          "type": "string",
+          "enum": [
+            "mobile_push",
+            "web_notification",
+            "email",
+            "slack",
+            "console"
+          ]
+        },
+        "target_user": {
+          "type": "string",
+          "description": "User ID if alert was targeted at specific user"
+        },
+        "reason_suppressed": {
+          "type": "string",
+          "description": "If action was suppressed, reason why (e.g., 'rate_limited', 'low_confidence', 'similar_recent_alert')"
+        }
+      },
+      "additionalProperties": true
+    },
+    "source": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_-]+$",
+      "description": "Source identifier: camera, sensor, user, system, API endpoint"
+    },
+    "user_feedback": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "correct",
+        "incorrect",
+        "contradiction",
+        "needs_review",
+        "accepted",
+        "rejected",
+        null
+      ],
+      "description": "User feedback on this event (null if no feedback yet)"
+    },
+    "feedback_metadata": {
+      "type": "object",
+      "description": "Additional feedback information",
+      "properties": {
+        "feedback_user_id": {
+          "type": "string",
+          "description": "User who provided feedback"
+        },
+        "feedback_timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When feedback was provided"
+        },
+        "feedback_reason": {
+          "type": "string",
+          "description": "User explanation for feedback"
+        },
+        "correction_applied": {
+          "type": "object",
+          "description": "If feedback resulted in correction"
+        }
+      }
+    },
+    "session_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid",
+      "description": "Session ID for grouping related events (null if standalone)"
+    },
+    "frame_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Video frame ID if from video stream (null if static image)"
+    },
+    "confidence_overall": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "Composite confidence score: min(detection_confidence, rule_match_confidence)"
+    },
+    "processing_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Time taken to process event in milliseconds"
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Additional indexed metadata for queries",
+      "properties": {
+        "model_version": {
+          "type": "string",
+          "description": "Version of detection/recognition model used"
+        },
+        "location_zone": {
+          "type": "string",
+          "description": "Physical location or zone (e.g., 'shelf-A3', 'warehouse-north')"
+        },
+        "device_id": {
+          "type": "string",
+          "description": "Device ID for mobile/external events"
+        },
+        "ip_address": {
+          "type": "string",
+          "description": "IP address if applicable"
+        },
+        "environment": {
+          "type": "string",
+          "enum": [
+            "production",
+            "staging",
+            "development"
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Categorical tags for filtering (e.g., 'battery', 'critical', 'false_positive')",
+      "examples": [
+        [
+          "battery",
+          "wear_assessment",
+          "user_corrected"
+        ]
+      ]
+    }
+  },
+  "examples": [
+    {
+      "event_id": "550e8400-e29b-41d4-a716-446655440000",
+      "timestamp": "2026-03-11T03:07:00Z",
+      "entity_id": "550e8400-e29b-41d4-a716-446655440001",
+      "detection": {
+        "detection_id": "det-12345",
+        "type": "battery_pack",
+        "confidence": 0.9,
+        "bounding_box": {
+          "x": 150,
+          "y": 200,
+          "width": 100,
+          "height": 120
+        },
+        "attributes": {
+          "scuffing_score": 0.72,
+          "wear_score": 0.68,
+          "color": "black",
+          "serial": "SN-12345"
+        }
+      },
+      "applied_rules": [
+        "550e8400-e29b-41d4-a716-446655440002"
+      ],
+      "rule_matches": [
+        {
+          "rule_id": "550e8400-e29b-41d4-a716-446655440002",
+          "predicate": "older_packs_have_scuffing",
+          "match_confidence": 0.89,
+          "explanation": "Battery age 2.5 years, scuffing_score (0.72) > threshold (0.65)"
+        }
+      ],
+      "action": "surfaced_rule",
+      "action_metadata": {
+        "alert_type": "warning",
+        "notification_channel": "mobile_push",
+        "target_user": "user:Archer"
+      },
+      "source": "camera-1",
+      "user_feedback": null,
+      "feedback_metadata": null,
+      "session_id": "sess-001",
+      "frame_id": "frame-12345",
+      "confidence_overall": 0.89,
+      "processing_ms": 47,
+      "metadata": {
+        "model_version": "yolov8-battery-v2.1",
+        "location_zone": "shelf-A3",
+        "environment": "production"
+      },
+      "tags": [
+        "battery",
+        "wear_assessment",
+        "alerted"
+      ]
+    },
+    {
+      "event_id": "550e8400-e29b-41d4-a716-446655440003",
+      "timestamp": "2026-03-11T03:10:00Z",
+      "entity_id": "550e8400-e29b-41d4-a716-446655440001",
+      "detection": {
+        "type": "battery_pack",
+        "confidence": 0.9
+      },
+      "applied_rules": [
+        "550e8400-e29b-41d4-a716-446655440002"
+      ],
+      "rule_matches": [
+        {
+          "rule_id": "550e8400-e29b-41d4-a716-446655440002",
+          "predicate": "older_packs_have_scuffing",
+          "match_confidence": 0.89,
+          "explanation": "Battery age 2.5 years, scuffing_score (0.72) > threshold (0.65)"
+        }
+      ],
+      "action": "correction_applied",
+      "source": "mobile-app",
+      "user_feedback": "contradiction",
+      "feedback_metadata": {
+        "feedback_user_id": "user:Archer",
+        "feedback_timestamp": "2026-03-11T03:10:00Z",
+        "feedback_reason": "Battery is still functioning well. Scuffing is cosmetic only.",
+        "correction_applied": {
+          "correction_type": "false_positive_marking",
+          "previous_value": "needs_replacement",
+          "corrected_value": "condition_acceptable"
+        }
+      },
+      "session_id": "sess-001",
+      "frame_id": null,
+      "confidence_overall": 0.89,
+      "processing_ms": 15,
+      "metadata": {
+        "device_id": "mobile-iphone-12",
+        "environment": "production"
+      },
+      "tags": [
+        "battery",
+        "user_corrected",
+        "false_positive"
+      ]
+    },
+    {
+      "event_id": "550e8400-e29b-41d4-a716-446655440004",
+      "timestamp": "2026-03-11T03:08:30Z",
+      "entity_id": "550e8400-e29b-41d4-a716-446655440005",
+      "detection": {
+        "type": "enclosure",
+        "confidence": 0.85,
+        "attributes": {
+          "color": "white",
+          "scuffing_score": 0.2
+        }
+      },
+      "applied_rules": [],
+      "action": "suppressed_alert",
+      "action_metadata": {
+        "reason_suppressed": "rate_limited - similar alert sent 5 minutes ago"
+      },
+      "source": "camera-2",
+      "user_feedback": null,
+      "session_id": "sess-002",
+      "frame_id": "frame-67890",
+      "confidence_overall": 0.85,
+      "processing_ms": 32,
+      "metadata": {
+        "model_version": "yolov8-battery-v2.1",
+        "location_zone": "bin-5",
+        "environment": "production"
+      },
+      "tags": [
+        "enclosure",
+        "no_rules_matched"
+      ]
+    },
+    {
+      "event_id": "550e8400-e29b-41d4-a716-446655440006",
+      "timestamp": "2026-03-11T04:00:00Z",
+      "entity_id": "550e8400-e29b-41d4-a716-446655440001",
+      "detection": null,
+      "applied_rules": [
+        "550e8400-e29b-41d4-a716-446655440002"
+      ],
+      "action": "rule_merged",
+      "source": "system",
+      "user_feedback": null,
+      "session_id": null,
+      "confidence_overall": 0.88,
+      "processing_ms": 234,
+      "metadata": {
+        "environment": "production"
+      },
+      "tags": [
+        "system_event",
+        "rule_optimization"
+      ]
+    },
+    {
+      "event_id": "550e8400-e29b-41d4-a716-446655440007",
+      "timestamp": "2026-03-11T05:15:00Z",
+      "entity_id": "550e8400-e29b-41d4-a716-446655440001",
+      "detection": {
+        "type": "battery_pack",
+        "confidence": 0.92,
+        "attributes": {
+          "scuffing_score": 0.75,
+          "wear_score": 0.71,
+          "battery_voltage": 10.8
+        }
+      },
+      "applied_rules": [
+        "550e8400-e29b-41d4-a716-446655440002",
+        "rule-voltage-critical"
+      ],
+      "rule_matches": [
+        {
+          "rule_id": "550e8400-e29b-41d4-a716-446655440002",
+          "predicate": "older_packs_have_scuffing",
+          "match_confidence": 0.91,
+          "explanation": "Age 2.6 years, scuffing 0.75 > 0.65"
+        },
+        {
+          "rule_id": "rule-voltage-critical",
+          "predicate": "battery_voltage_low",
+          "match_confidence": 0.95,
+          "explanation": "Voltage 10.8V < threshold 11.0V - CRITICAL"
+        }
+      ],
+      "action": "escalated",
+      "action_metadata": {
+        "alert_type": "critical",
+        "notification_channel": "slack",
+        "target_user": "ops-team-1"
+      },
+      "source": "camera-1",
+      "user_feedback": null,
+      "session_id": "sess-003",
+      "frame_id": "frame-99999",
+      "confidence_overall": 0.91,
+      "processing_ms": 58,
+      "metadata": {
+        "model_version": "yolov8-battery-v2.1",
+        "location_zone": "shelf-A3",
+        "environment": "production"
+      },
+      "tags": [
+        "battery",
+        "critical",
+        "multiple_rules_matched",
+        "escalation"
+      ]
+    }
+  ]
+}

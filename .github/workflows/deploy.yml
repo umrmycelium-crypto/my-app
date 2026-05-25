@@ -1,0 +1,248 @@
+name: CI-CD Vision Platform
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+env:
+  REGISTRY: azurecr.io
+  IMAGE_NAME_RULE_ENGINE: rule-engine
+  IMAGE_NAME_DETECTION: detection-service
+  KUBERNETES_VERSION: '1.27'
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r services/rule_engine/requirements.txt
+          pip install pytest pytest-cov
+
+      - name: Run unit tests
+        run: |
+          pytest tests/unit --cov=services --cov-report=xml --cov-report=html
+
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+
+  build-images:
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Login to Azure Container Registry
+        uses: azure/docker-login@v1
+        with:
+          login-server: ${{ secrets.ACR_NAME }}.azurecr.io
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Build and push rule-engine image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./services/rule_engine
+          file: ./services/rule_engine/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME_RULE_ENGINE }}:latest
+            ${{ secrets.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME_RULE_ENGINE }}:${{ github.sha }}
+          cache-from: type=registry,ref=${{ secrets.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME_RULE_ENGINE }}:buildcache
+          cache-to: type=registry,ref=${{ secrets.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME_RULE_ENGINE }}:buildcache,mode=max
+
+      - name: Build and push detection-service image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./services/detection
+          file: ./services/detection/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME_DETECTION }}:latest
+            ${{ secrets.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME_DETECTION }}:${{ github.sha }}
+          cache-from: type=registry,ref=${{ secrets.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME_DETECTION }}:buildcache
+          cache-to: type=registry,ref=${{ secrets.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME_DETECTION }}:buildcache,mode=max
+
+  deploy-staging:
+    runs-on: ubuntu-latest
+    needs: build-images
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: ${{ env.KUBERNETES_VERSION }}
+
+      - name: Get AKS credentials
+        run: |
+          az aks get-credentials \
+            --resource-group vision-platform-rg \
+            --name vision-aks \
+            --overwrite-existing
+
+      - name: Run database migrations
+        run: |
+          kubectl run migration-job-${{ github.run_id }} \
+            --image=${{ secrets.ACR_NAME }}.azurecr.io/db-migration:${{ github.sha }} \
+            --image-pull-policy=Always \
+            --env="POSTGRES_CONN=${{ secrets.POSTGRES_CONN }}" \
+            --restart=Never \
+            -n vision || true
+          
+          # Wait for job to complete
+          sleep 10
+          kubectl logs migration-job-${{ github.run_id }} -n vision || true
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: '3.12.0'
+
+      - name: Deploy rule-engine Helm chart
+        run: |
+          helm upgrade --install rule-engine charts/rule-engine \
+            --namespace vision \
+            --create-namespace \
+            --set image.repository=${{ secrets.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME_RULE_ENGINE }} \
+            --set image.tag=${{ github.sha }} \
+            --set environment=staging \
+            -f charts/rule-engine/values.yaml \
+            --wait \
+            --timeout 5m
+
+      - name: Verify deployment
+        run: |
+          kubectl rollout status deployment/rule-engine -n vision --timeout=5m
+          kubectl get pods -n vision
+          kubectl get svc -n vision
+
+  smoke-tests:
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install test dependencies
+        run: |
+          pip install requests pytest
+
+      - name: Run smoke tests
+        run: |
+          python tests/smoke_tests.py
+        env:
+          API_ENDPOINT: http://rule-engine.vision.svc.cluster.local:8080
+
+  deploy-production:
+    runs-on: ubuntu-latest
+    needs: smoke-tests
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment:
+      name: production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: ${{ env.KUBERNETES_VERSION }}
+
+      - name: Get AKS credentials
+        run: |
+          az aks get-credentials \
+            --resource-group vision-platform-rg \
+            --name vision-aks \
+            --overwrite-existing
+
+      - name: Deploy to production with canary
+        run: |
+          # Deploy new version to canary (10% of traffic)
+          helm upgrade --install rule-engine charts/rule-engine \
+            --namespace vision \
+            --set image.repository=${{ secrets.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME_RULE_ENGINE }} \
+            --set image.tag=${{ github.sha }} \
+            --set environment=production \
+            --set replicaCount=3 \
+            -f charts/rule-engine/values.yaml \
+            --wait \
+            --timeout 10m
+
+      - name: Monitor deployment
+        run: |
+          # Wait and monitor
+          kubectl rollout status deployment/rule-engine -n vision --timeout=10m
+          
+          # Check metrics
+          echo "Pod status:"
+          kubectl get pods -n vision -l app.kubernetes.io/name=rule-engine
+          
+          echo "Resource usage:"
+          kubectl top pods -n vision -l app.kubernetes.io/name=rule-engine || true
+
+      - name: Notify deployment completion
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '✅ Deployment to production completed successfully!\n\nImage: `${{ secrets.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME_RULE_ENGINE }}:${{ github.sha }}`'
+            })
+
+  security-scan:
+    runs-on: ubuntu-latest
+    needs: build-images
+    steps:
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ secrets.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME_RULE_ENGINE }}:${{ github.sha }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-results.sarif'
