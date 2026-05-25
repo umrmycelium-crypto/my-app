@@ -1,0 +1,232 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Entity Fact Schema",
+  "description": "Represents a persistent entity in the vision system memory with visual signature, attributes, and event history.",
+  "type": "object",
+  "required": [
+    "entity_id",
+    "type",
+    "visual_signature_id",
+    "labels",
+    "attributes",
+    "source",
+    "confidence",
+    "history"
+  ],
+  "properties": {
+    "entity_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier for the entity (UUID v4)"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "battery_pack",
+        "enclosure",
+        "connector",
+        "circuit_board",
+        "cable",
+        "other"
+      ],
+      "description": "Classification of the entity"
+    },
+    "visual_signature_id": {
+      "type": "string",
+      "pattern": "^vec_[a-zA-Z0-9_-]+$",
+      "description": "Reference to the vector embedding stored in Milvus for visual similarity search"
+    },
+    "labels": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-zA-Z_]+:[a-zA-Z0-9_-]+$"
+      },
+      "description": "Key-value labels for categorical identification (e.g., 'serial:SN12345', 'brand:Acme', 'part_number:BP-001')",
+      "examples": [
+        "serial:SN12345",
+        "brand:Acme",
+        "part_number:BP-001",
+        "location_zone:warehouse_north"
+      ]
+    },
+    "attributes": {
+      "type": "object",
+      "description": "Numeric and string attributes extracted from detections",
+      "properties": {
+        "scuffing_score": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "description": "Damage assessment: surface scuffing severity (0=pristine, 1=severe)"
+        },
+        "wear_score": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "description": "Degradation assessment: overall wear from age/use (0=new, 1=end-of-life)"
+        },
+        "color": {
+          "type": "string",
+          "enum": [
+            "black",
+            "white",
+            "red",
+            "blue",
+            "green",
+            "yellow",
+            "gray",
+            "silver",
+            "unknown"
+          ],
+          "description": "Dominant color classification"
+        },
+        "last_seen": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp of most recent detection"
+        },
+        "location": {
+          "type": "string",
+          "description": "Current or most recent location (e.g., 'shelf-A3', 'bin-5', 'cart-B12')"
+        },
+        "temperature": {
+          "type": "number",
+          "description": "Optional: thermal reading if available (Celsius)"
+        },
+        "battery_voltage": {
+          "type": "number",
+          "description": "Optional: voltage reading if available (Volts)"
+        },
+        "custom_field_1": {
+          "type": [
+            "string",
+            "number",
+            "boolean"
+          ],
+          "description": "Application-specific custom attribute"
+        }
+      },
+      "required": [
+        "last_seen"
+      ],
+      "additionalProperties": true
+    },
+    "source": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_-]+$",
+      "description": "Source camera or sensor identifier (e.g., 'camera-1', 'camera-2', 'thermal-sensor-north')"
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "Composite confidence score: how confident is this entity recognition (detection confidence × visual matching confidence)"
+    },
+    "history": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "description": "Chronological list of event UUIDs associated with this entity (detections, corrections, rule matches)"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when entity was first created"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when entity was last updated"
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Additional metadata not part of the core schema",
+      "properties": {
+        "manual_override": {
+          "type": "boolean",
+          "description": "Whether this entity was manually created or corrected by user"
+        },
+        "contradiction_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of contradictory observations since creation"
+        },
+        "rule_match_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total number of rule matches for this entity"
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "examples": [
+    {
+      "entity_id": "550e8400-e29b-41d4-a716-446655440000",
+      "type": "battery_pack",
+      "visual_signature_id": "vec_123",
+      "labels": [
+        "serial:SN12345",
+        "brand:Acme",
+        "part_number:BP-4800"
+      ],
+      "attributes": {
+        "scuffing_score": 0.2,
+        "wear_score": 0.7,
+        "color": "black",
+        "last_seen": "2026-03-11T03:07:00Z",
+        "location": "shelf-A3",
+        "temperature": 22.5,
+        "battery_voltage": 11.8
+      },
+      "source": "camera-1",
+      "confidence": 0.92,
+      "history": [
+        "event-uuid-1",
+        "event-uuid-2",
+        "event-uuid-3"
+      ],
+      "created_at": "2026-03-10T10:00:00Z",
+      "updated_at": "2026-03-11T03:07:00Z",
+      "metadata": {
+        "manual_override": false,
+        "contradiction_count": 1,
+        "rule_match_count": 5
+      }
+    },
+    {
+      "entity_id": "650e8400-e29b-41d4-a716-446655440001",
+      "type": "enclosure",
+      "visual_signature_id": "vec_456",
+      "labels": [
+        "serial:ENC-9876",
+        "brand:TechCorp",
+        "part_number:ENC-2000"
+      ],
+      "attributes": {
+        "scuffing_score": 0.45,
+        "wear_score": 0.3,
+        "color": "white",
+        "last_seen": "2026-03-11T02:45:00Z",
+        "location": "bin-5",
+        "temperature": 18.2
+      },
+      "source": "camera-2",
+      "confidence": 0.88,
+      "history": [
+        "event-uuid-4",
+        "event-uuid-5"
+      ],
+      "created_at": "2026-03-09T15:30:00Z",
+      "updated_at": "2026-03-11T02:45:00Z",
+      "metadata": {
+        "manual_override": true,
+        "contradiction_count": 0,
+        "rule_match_count": 2
+      }
+    }
+  ]
+}

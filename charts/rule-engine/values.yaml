@@ -1,0 +1,38 @@
+# Default values for rule-engine Helm chart
+
+# Number of replicas
+replicaCount: 2
+
+image:
+  repository: visionacr.azurecr.io/rule-engine
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 8080
+
+# Environment variables
+environment: production
+logLevel: info
+
+# Resource limits and requests
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 250m
+    memory: 256Mi
+
+# Pod disruption budget
+podDisruptionBudget:
+  minAvailable: 1
+
+# Autoscaling
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
