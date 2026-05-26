@@ -1,12 +1,12 @@
 # Build stage
-FROM python:3.11-slim as builder
+FROM python:3.12-slim as builder
 
 WORKDIR /app
 COPY services/rule_engine/requirements.txt .
-RUN pip install --user --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip setuptools wheel && pip install --user --no-cache-dir -r requirements.txt
 
 # Runtime stage
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 COPY --from=builder /root/.local /root/.local
