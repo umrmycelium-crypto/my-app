@@ -88,10 +88,11 @@ set +a
 
 # Build Rule Engine
 echo "Building Rule Engine..."
+cd /opt/mycelium/my-app
 podman build -t my-app-rule-engine:latest \
-  --build-context-from=.. \
-  -f ../services/rule_engine/Dockerfile \
-  ..
+  -f services/rule_engine/Dockerfile \
+  .
+cd deploy
 
 # Start databases
 echo "Starting PostgreSQL (my-app)..."
