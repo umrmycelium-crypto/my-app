@@ -13,7 +13,7 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./migrations:/docker-entrypoint-initdb.d
+      - ../migrations:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U pgadmin -d visiondb"]
       interval: 10s
@@ -40,7 +40,9 @@ services:
       - mycelium
 
   my-app-rule-engine:
-    build: ./services/rule_engine
+    build:
+      context: ..
+      dockerfile: services/rule_engine/Dockerfile
     container_name: my-app-rule-engine
     environment:
       POSTGRES_CONN: "postgresql://pgadmin:${POSTGRES_PASSWORD:-changeme}@my-app-postgres:5432/visiondb"
