@@ -3,7 +3,7 @@ version: '3.9'
 services:
   # ===== MY-APP STACK =====
   my-app-postgres:
-    image: postgres:15-alpine
+    image: postgres:16-alpine
     container_name: my-app-postgres
     environment:
       POSTGRES_USER: pgadmin
@@ -24,7 +24,7 @@ services:
       - mycelium
 
   my-app-redis:
-    image: redis:7.2-alpine
+    image: redis:7.4-alpine
     container_name: my-app-redis
     ports:
       - "6379:6379"
@@ -67,7 +67,7 @@ services:
 
   # ===== MYCELIUM ECOSYSTEM =====
   postgres-central:
-    image: postgres:15-alpine
+    image: postgres:16-alpine
     container_name: postgres-central
     environment:
       POSTGRES_USER: ${DB_USER:-admin}
@@ -85,7 +85,7 @@ services:
       - mycelium
 
   redis-central:
-    image: redis:7.2-alpine
+    image: redis:7.4-alpine
     container_name: redis-central
     ports:
       - "6380:6379"
@@ -185,7 +185,7 @@ services:
 
   # ===== VECTOR DB & SEARCH =====
   memsys-milvus-standalone:
-    image: milvusdb/milvus:v2.5.2
+    image: milvusdb/milvus:v2.6.3
     container_name: memsys-milvus-standalone
     environment:
       COMMON_STORAGETYPE: local
@@ -204,7 +204,7 @@ services:
       - mycelium
 
   memsys-elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.0
     container_name: memsys-elasticsearch
     environment:
       - discovery.type=single-node
@@ -223,7 +223,7 @@ services:
       - mycelium
 
   memsys-mongodb:
-    image: mongo:7.0
+    image: mongo:8.0
     container_name: memsys-mongodb
     ports:
       - "27017:27017"
@@ -240,7 +240,7 @@ services:
 
   # ===== INGRESS & PROXY =====
   caddy:
-    image: caddy:latest
+    image: caddy:2.8
     container_name: mdgt-public-ingress
     ports:
       - "80:80"
