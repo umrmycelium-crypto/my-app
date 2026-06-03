@@ -1,19 +1,32 @@
-# my-app
+# mycelium-core
 
-A distributed, multi-platform application with iOS client, rule engine microservice, and cloud infrastructure automation.
+The public-safe core of the Mycelium system: rule engine, schemas, infrastructure templates, and sanitized documentation for turning private knowledge work into reusable systems.
 
 ## Overview
 
-**my-app** is designed as a modular system with:
+**mycelium-core** is designed as a modular system with:
 - **iOS Client** - Native iOS application (see `ios/` submodule)
 - **Rule Engine Service** - Python-based microservice for event processing and entity management
 - **Infrastructure** - Azure-based cloud deployment with Bicep IaC
 - **Kubernetes Integration** - Helm charts for container orchestration
+- **Truth-to-Output Flow** - A protected path from private context to public concepts, examples, and working systems
+
+## Repository Boundaries
+
+This repository is the public/shareable application layer of the Mycelium system. Keep code, schemas, infrastructure templates, tests, and sanitized documentation here.
+
+- See `REPO_FLOW.md` for how this repo connects to the internal system bundle, operator docs, synced copies, and backups.
+- See `PUBLIC_PRIVATE_SECRET.md` for what belongs in public, private, and secret lanes.
+- See `TRUTH_TO_OUTPUT.md` for the main mushroom architecture: private truth, messy capture, processing, public concepts, examples, and enterprise systems.
+- Use `.env.example` as the committed template; keep real `.env` values local and uncommitted.
 
 ## Project Structure
 
 ```
-my-app/
+mycelium-core/
+├── concepts/                     # Public-safe philosophy, patterns, and architecture
+├── examples/                     # Runnable examples with fake or sanitized data
+├── enterprise/                   # Hardened reference systems and deployment patterns
 ├── ios/                          # iOS mobile application (git submodule)
 │   ├── README.md
 │   ├── .gitignore
@@ -47,7 +60,7 @@ my-app/
 
 ## Prerequisites
 
-Before setting up my-app, ensure you have:
+Before setting up mycelium-core, ensure you have:
 
 ### For Local Development
 - **Python 3.10+** - For rule engine service
@@ -69,8 +82,8 @@ Before setting up my-app, ensure you have:
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/umrmycelium-crypto/my-app.git
-cd my-app
+git clone https://github.com/umrmycelium-crypto/my-app.git mycelium-core
+cd mycelium-core
 git submodule update --init --recursive
 ```
 
@@ -169,12 +182,12 @@ Detailed instructions in `AZURE_DEPLOYMENT_GUIDE.md`.
 ```bash
 # Validate infrastructure
 az deployment group validate \
-  --resource-group my-app-rg \
+  --resource-group mycelium-core-rg \
   --template-file infra/main.bicep
 
 # Deploy infrastructure
 az deployment group create \
-  --resource-group my-app-rg \
+  --resource-group mycelium-core-rg \
   --template-file infra/main.bicep \
   --parameters @infra/parameters.json
 ```
@@ -187,7 +200,7 @@ helm repo add mycelium https://helm.example.com
 
 # Deploy rule engine service
 helm install rule-engine ./charts/rule-engine \
-  --namespace my-app \
+  --namespace mycelium-core \
   --values charts/rule-engine/values.yaml
 ```
 

@@ -1,0 +1,78 @@
+# Caddy Configuration - Unified Service Routing
+# Place in deploy/caddy/Caddyfile
+
+{
+  admin off
+}
+
+:80 {
+  # API Routes
+  handle /api/v1/* {
+    reverse_proxy my-app-rule-engine:8080
+  }
+  
+  # Gateway Routes
+  handle /gateway/* {
+    reverse_proxy the-gateway:3012
+  }
+  
+  # Routing Service
+  handle /switch/* {
+    reverse_proxy switchisland:3006
+  }
+  
+  # Data Scribe Service
+  handle /scribe/* {
+    reverse_proxy spore-scribe:3010
+  }
+  
+  # Lifecycle Management
+  handle /renewal/* {
+    reverse_proxy renewal-core:3011
+  }
+  
+  # CMS & Content
+  handle /wordpress* {
+    reverse_proxy wordpress:80
+  }
+  
+  # Database UI
+  handle /baserow* {
+    reverse_proxy baserow:80
+  }
+  
+  # Chat Service
+  handle /chat* {
+    reverse_proxy forge-chat:5000
+  }
+  
+  # Email Testing
+  handle /mail* {
+    reverse_proxy mailhog:8025
+  }
+  
+  # Health Check
+  handle /health {
+    respond "Mycelium Ecosystem Online"
+  }
+  
+  # Root
+  respond "Mycelium Ecosystem"
+}
+
+# HTTPS (uncomment and configure domain)
+# example.com {
+#   handle /api/v1/* {
+#     reverse_proxy my-app-rule-engine:8080
+#   }
+#   
+#   handle /wordpress* {
+#     reverse_proxy wordpress:80
+#   }
+#   
+#   handle /baserow* {
+#     reverse_proxy baserow:80
+#   }
+#   
+#   respond 200
+# }

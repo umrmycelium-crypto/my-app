@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Mycelium Core UI</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Mycelium navigation">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">M</div>
+          <div>
+            <h1>mycelium-core</h1>
+            <p>truth to output</p>
+          </div>
+        </div>
+
+        <nav class="nav-list" aria-label="Primary">
+          <button class="nav-item active" type="button" data-view="intake">Intake</button>
+          <button class="nav-item" type="button" data-view="truth">Main Mushroom</button>
+          <button class="nav-item" type="button" data-view="projects">Projects</button>
+          <button class="nav-item" type="button" data-view="public">Public Output</button>
+        </nav>
+
+        <section class="boundary-panel" aria-label="Boundary status">
+          <h2>Boundary</h2>
+          <div class="boundary-row private">
+            <span></span>
+            <strong>Private</strong>
+            <em id="privateCount">0</em>
+          </div>
+          <div class="boundary-row public">
+            <span></span>
+            <strong>Public</strong>
+            <em id="publicCount">0</em>
+          </div>
+          <div class="boundary-row secret">
+            <span></span>
+            <strong>Secret</strong>
+            <em id="secretCount">0</em>
+          </div>
+        </section>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">AI layer</p>
+            <h2 id="viewTitle">Intake and sorting</h2>
+          </div>
+          <div class="topbar-actions">
+            <button class="icon-button" type="button" id="addSample" title="Add sample capture">+</button>
+            <button class="text-button" type="button" id="clearCaptures">Clear</button>
+          </div>
+        </header>
+
+        <section class="view active" id="view-intake" aria-label="Intake">
+          <div class="intake-grid">
+            <section class="panel intake-panel">
+              <div class="panel-heading">
+                <h3>Capture</h3>
+                <span class="status-pill">local prototype</span>
+              </div>
+              <label class="drop-zone" for="fileInput">
+                <input id="fileInput" type="file" multiple>
+                <span class="drop-icon">+</span>
+                <strong>Drop documents here</strong>
+                <small>Text files are read locally. Other files are indexed by name.</small>
+              </label>
+              <textarea id="captureText" rows="8" placeholder="Paste a note, transcript, idea, log, or rough feeling here."></textarea>
+              <button class="primary-button" type="button" id="processCapture">Process capture</button>
+            </section>
+
+            <section class="panel">
+              <div class="panel-heading">
+                <h3>Sorted captures</h3>
+                <span id="captureTotal" class="status-pill">0 items</span>
+              </div>
+              <div class="capture-list" id="captureList"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="view-truth" aria-label="Main Mushroom">
+          <div class="truth-layout">
+            <section class="main-mushroom" aria-label="Main mushroom profile">
+              <div class="core-node">
+                <span>Main Mushroom</span>
+                <strong>Life profile</strong>
+                <small>private source layer</small>
+              </div>
+              <div class="ring ring-public">public image</div>
+              <div class="ring ring-projects">projects</div>
+              <div class="ring ring-feelings">internal signal</div>
+            </section>
+
+            <section class="panel relevance-panel">
+              <div class="panel-heading">
+                <h3>Private relevance</h3>
+                <span class="status-pill">visible to you</span>
+              </div>
+              <div class="relevance-list" id="relevanceList"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="view-projects" aria-label="Projects">
+          <div class="project-board">
+            <section class="lane" data-lane="concepts">
+              <h3>Concepts</h3>
+              <p>Patterns and language distilled from truth.</p>
+              <div class="lane-items" id="conceptItems"></div>
+            </section>
+            <section class="lane" data-lane="examples">
+              <h3>Examples</h3>
+              <p>Safe demos with fake or sanitized data.</p>
+              <div class="lane-items" id="exampleItems"></div>
+            </section>
+            <section class="lane" data-lane="enterprise">
+              <h3>Enterprise</h3>
+              <p>Known-working systems and runbooks.</p>
+              <div class="lane-items" id="enterpriseItems"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="view-public" aria-label="Public output">
+          <div class="output-grid">
+            <section class="panel">
+              <div class="panel-heading">
+                <h3>Ready for public</h3>
+                <span class="status-pill">sanitized</span>
+              </div>
+              <div id="publicList" class="capture-list"></div>
+            </section>
+            <section class="panel">
+              <div class="panel-heading">
+                <h3>Held back</h3>
+                <span class="status-pill">needs review</span>
+              </div>
+              <div id="heldList" class="capture-list"></div>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
