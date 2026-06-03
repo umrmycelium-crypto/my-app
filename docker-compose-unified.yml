@@ -1,0 +1,400 @@
+version: '3.9'
+
+services:
+  # ═══════════════════════════════════════════════════════════════════════════
+  # 🏗️  MY-APP STACK (Vision Pipeline)
+  # ═══════════════════════════════════════════════════════════════════════════
+  
+  my-app-postgres:
+    image: postgres:16-alpine
+    container_name: my-app-postgres
+    environment:
+      POSTGRES_USER: pgadmin
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: visiondb
+    ports:
+      - "5432:5432"
+    volumes:
+      - my_app_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pgadmin -d visiondb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - mycelium
+
+  my-app-redis:
+    image: redis:7.4-alpine
+    container_name: my-app-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - my_app_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - mycelium
+
+  my-app-rule-engine:
+    build:
+      context: ../
+      dockerfile: services/rule_engine/Dockerfile
+    container_name: my-app-rule-engine
+    environment:
+      POSTGRES_CONN: "postgresql://pgadmin:${POSTGRES_PASSWORD:-changeme}@my-app-postgres:5432/visiondb"
+      REDIS_HOST: "my-app-redis"
+      RULE_ENGINE_PORT: "8080"
+      LOG_LEVEL: "INFO"
+    depends_on:
+      my-app-postgres:
+        condition: service_healthy
+      my-app-redis:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health').read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mycelium
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # 🏛️  CENTRAL DATA LAYER
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  postgres-central:
+    image: postgres:16-alpine
+    container_name: postgres-central
+    environment:
+      POSTGRES_USER: ${DB_USER:-admin}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+      POSTGRES_DB: mycelium
+    volumes:
+      - postgres_central_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-admin}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - mycelium
+
+  redis-central:
+    image: redis:7.4-alpine
+    container_name: redis-central
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_central_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - mycelium
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # 🔍 SEARCH & VECTOR LAYER
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  memsys-milvus-standalone:
+    image: milvusdb/milvus:v2.6.3
+    container_name: memsys-milvus-standalone
+    environment:
+      COMMON_STORAGETYPE: local
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    volumes:
+      - milvus_data:/var/lib/milvus
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - mycelium
+
+  memsys-elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.0
+    container_name: memsys-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200 | grep -q cluster_name"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - mycelium
+
+  memsys-mongodb:
+    image: mongo:8.0
+    container_name: memsys-mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - mycelium
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # 🎯 MARCU MICROSERVICES
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  switchisland:
+    image: marcu-switchisland:latest
+    container_name: switchisland
+    environment:
+      POSTGRES_HOST: postgres-central
+      POSTGRES_DB: mycelium
+      REDIS_HOST: redis-central
+      NODE_ENV: production
+    depends_on:
+      postgres-central:
+        condition: service_healthy
+      redis-central:
+        condition: service_healthy
+    ports:
+      - "3006:3006"
+    restart: unless-stopped
+    networks:
+      - mycelium
+
+  the-gateway:
+    image: marcu-the-gateway:latest
+    container_name: the-gateway
+    environment:
+      POSTGRES_HOST: postgres-central
+      POSTGRES_DB: mycelium
+      REDIS_HOST: redis-central
+      NODE_ENV: production
+    depends_on:
+      postgres-central:
+        condition: service_healthy
+      redis-central:
+        condition: service_healthy
+    ports:
+      - "3012:3012"
+    restart: unless-stopped
+    networks:
+      - mycelium
+
+  spore-scribe:
+    image: marcu-spore-scribe:latest
+    container_name: spore-scribe
+    environment:
+      POSTGRES_HOST: postgres-central
+      POSTGRES_DB: mycelium
+      REDIS_HOST: redis-central
+      NODE_ENV: production
+    depends_on:
+      postgres-central:
+        condition: service_healthy
+      redis-central:
+        condition: service_healthy
+    ports:
+      - "3010:3010"
+    restart: unless-stopped
+    networks:
+      - mycelium
+
+  renewal-core:
+    image: marcu-renewal-core:latest
+    container_name: renewal-core
+    environment:
+      POSTGRES_HOST: postgres-central
+      POSTGRES_DB: mycelium
+      REDIS_HOST: redis-central
+      NODE_ENV: production
+    depends_on:
+      postgres-central:
+        condition: service_healthy
+      redis-central:
+        condition: service_healthy
+    ports:
+      - "3011:3011"
+    restart: unless-stopped
+    networks:
+      - mycelium
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # 📰 CONTENT & CMS LAYER
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  wordpress-db:
+    image: mysql:8.0
+    container_name: wordpress-db
+    environment:
+      MYSQL_ROOT_PASSWORD: ${WORDPRESS_DB_ROOT_PASSWORD:-wordpress}
+      MYSQL_DATABASE: ${WORDPRESS_DB_NAME:-wordpress}
+      MYSQL_USER: ${WORDPRESS_DB_USER:-wordpress}
+      MYSQL_PASSWORD: ${WORDPRESS_DB_PASSWORD:-wordpress}
+    volumes:
+      - wordpress_db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - mycelium
+
+  wordpress:
+    image: wordpress:6.4-apache
+    container_name: wordpress
+    environment:
+      WORDPRESS_DB_HOST: wordpress-db:3306
+      WORDPRESS_DB_NAME: ${WORDPRESS_DB_NAME:-wordpress}
+      WORDPRESS_DB_USER: ${WORDPRESS_DB_USER:-wordpress}
+      WORDPRESS_DB_PASSWORD: ${WORDPRESS_DB_PASSWORD:-wordpress}
+    depends_on:
+      wordpress-db:
+        condition: service_healthy
+    ports:
+      - "8081:80"
+    volumes:
+      - wordpress_data:/var/www/html
+    restart: unless-stopped
+    networks:
+      - mycelium
+
+  baserow:
+    image: baserow/baserow:latest
+    container_name: baserow
+    environment:
+      DATABASE_URL: postgresql://${DB_USER:-admin}:${DB_PASSWORD:-changeme}@postgres-central:5432/baserow
+      REDIS_URL: redis://redis-central:6379
+    depends_on:
+      postgres-central:
+        condition: service_healthy
+      redis-central:
+        condition: service_healthy
+    ports:
+      - "3000:80"
+    volumes:
+      - baserow_data:/baserow/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - mycelium
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # 🔧 UTILITIES
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: mailhog
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    restart: unless-stopped
+    networks:
+      - mycelium
+
+  forge-chat:
+    image: forge-chat:latest
+    container_name: forge-chat
+    ports:
+      - "5000:5000"
+    environment:
+      REDIS_HOST: redis-central
+      POSTGRES_HOST: postgres-central
+    depends_on:
+      postgres-central:
+        condition: service_healthy
+      redis-central:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - mycelium
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # 🚪 INGRESS & REVERSE PROXY
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  caddy:
+    image: caddy:2.8
+    container_name: mdgt-public-ingress
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      ACME_AGREE: "true"
+    restart: unless-stopped
+    networks:
+      - mycelium
+
+volumes:
+  # My-app volumes
+  my_app_pgdata:
+    driver: local
+  my_app_redis_data:
+    driver: local
+  
+  # Central volumes
+  postgres_central_data:
+    driver: local
+  redis_central_data:
+    driver: local
+  
+  # Search & Vector volumes
+  milvus_data:
+    driver: local
+  elasticsearch_data:
+    driver: local
+  mongodb_data:
+    driver: local
+  
+  # CMS volumes
+  wordpress_db_data:
+    driver: local
+  wordpress_data:
+    driver: local
+  baserow_data:
+    driver: local
+  
+  # Proxy volumes
+  caddy_data:
+    driver: local
+  caddy_config:
+    driver: local
+
+networks:
+  mycelium:
+    driver: bridge
